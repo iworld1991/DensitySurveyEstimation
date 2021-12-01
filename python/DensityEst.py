@@ -15,7 +15,7 @@
 
 # ### Density Estimation 
 #
-# - Following Manski et al.(2009)
+# - Following [Manski et al.(2009)](https://www.tandfonline.com/doi/abs/10.1198/jbes.2009.0003)
 # - Three cases 
 #    - case 1. 3+ intervales with positive probabilities, to be fitted with a generalized beta distribution
 #    - case 2. exactly 2 adjacent intervals with positive probabilities, to be fitted with a triangle distribution 
@@ -88,13 +88,24 @@ def GeneralizedBetaEst(bin,probs):
             distance= sum((beta.cdf(bin[1:],a,b,loc=lb,scale=ub-lb)-cdf)**2)
             return distance
         if lb==bin[0] and ub==bin[-1]:
-            para_est = minimize(distance4para,x0_4para,method='CG')['x'] 
+            result = minimize(distance4para,x0_4para,
+                                method='CG')
+            if result['success']:
+                para_est = result['x']
+            else:
+                para_est = []
+            
         else:
-            para_est = minimize(distance2para,x0_2para,method='CG')['x']
-            scale = ub-lb
-            para_est = np.concatenate([para_est,
-                                      np.array([lb,scale])]
-                                     )
+            result = minimize(distance2para,x0_2para,
+                                method='CG')
+            para_est = result['x']
+            if result['success']:
+                para_est = result['x']
+                scale = ub-lb
+                para_est = np.concatenate([para_est,
+                                          np.array([lb,scale])])
+            else:
+                para_est = []
         return para_est   # could be 2 or 4 parameters 
 
 
@@ -431,7 +442,7 @@ UniformStats(para_est['lb'],para_est['ub'])
 
 # + code_folding=[]
 ## simulate a generalized distribution
-sim_n=200
+sim_n=1000
 true_alpha,true_beta,true_loc,true_scale=1.4,2.2,0,3
 sim_data = beta.rvs(true_alpha,true_beta,
                     loc=true_loc,
@@ -451,7 +462,8 @@ print('Estimated moments:',GeneralizedBetaStats(sim_est[0],
 print('True simulated moments:',
       np.mean(sim_data),
      np.std(sim_data)**2,
-     np.std(sim_data))
+     np.std(sim_data)
+     )
 
 # + code_folding=[0]
 ## plot the estimated generalized beta versus the histogram of simulated data drawn from a true beta distribution 
@@ -490,7 +502,7 @@ def SynDensityStat(bin,probs):
     if sum(probs)==1:
         print("probs sum up to 1")
         ## Check if all bins have the same probability (special case for which we need Uniform and not Beta distributions)
-        all_pos = 0
+        all_equal = 0
         pos_bin = []
         # find non zero positions
         pos_entry = np.argwhere(probs!=0)
@@ -506,11 +518,11 @@ def SynDensityStat(bin,probs):
                 
         if len(pos_bin)!=0:
             if np.all(pos_bin == pos_bin[0]):
-                all_pos = 1
+                all_equal = 1
                 
                 
         ## Beta distributions 
-        if sum([probs[i]>0 for i in range(len(bin)-1)])>=3 and all_pos == 0:
+        if sum([probs[i]>0 for i in range(len(bin)-1)])>=3 and all_equal == 0:
             print("at least three bins with positive probs")
             para_est=GeneralizedBetaEst(bin,probs)
             if len(para_est)==4:
@@ -520,7 +532,7 @@ def SynDensityStat(bin,probs):
                 print('2 parameters')
                 return GeneralizedBetaStats(para_est[0],para_est[1],0,1)
         ## Triangle distributions
-        if sum([probs[i]>0 for i in range(len(bin)-1)])==2 and all_pos == 0:
+        if sum([probs[i]>0 for i in range(len(bin)-1)])==2 and all_equal == 0:
             #print("There are two bins with positive probs")
             pprobadj = [i for i in range(1,len(bin)-3) if probs[i]>0 and probs[i+1]>0]   # from 1 to -3 bcz excluding the open-ended on the left/right
             if sum(pprobadj)>0:
@@ -533,15 +545,15 @@ def SynDensityStat(bin,probs):
             para_est= UniformEst(bin,probs)
             print(para_est)
             return UniformStats(para_est['lb'],para_est['ub'])
-        if all_pos == 1:
+        if all_equal == 1:
             print("all bins have the same prob")
             para_est= UniformEst(bin,probs)
             print(para_est)
             return UniformStats(para_est['lb'],para_est['ub'])            
         else:
-            return {"mean":[],"variance":[], "std":[], "irq1090":[]}
+            return {"mean":[],"variance":[], "std":[], "iqr1090":[]}
     else:
-        return {"mean":[],"variance":[], "std":[], "irq1090":[]}
+        return {"mean":[],"variance":[], "std":[], "iqr1090":[]}
 
 # + code_folding=[]
 ## testing the synthesized estimator function using an arbitrary example created above
@@ -560,9 +572,6 @@ IndSPF=pd.read_stata('../data/sample_data.dta')
 nobs=len(IndSPF)
 SPF_bins=np.array([-10,0,0.5,1,1.5,2,2.5,3,3.5,4,10])
 print("There are "+str(len(SPF_bins)-1)+" bins in SPF")
-# -
-
-len({'mean':1,'var':2})
 
 # + code_folding=[]
 ##############################################
@@ -681,7 +690,7 @@ IndSPF_pk.to_stata('../data/Dstsample_data.dta')
 # + code_folding=[]
 ### Robustness checks: focus on big negative mean estimates 
 sim_bins_data = SPF_bins
-print(str(sum(IndSPF_pk['PRCCPIMean1']<-2))+' abnormals')
+print(str(sum(IndSPF_pk['PRCCPIMean1']<=0))+' abnormals')
 ct=0
 figure=plt.plot()
 for id in IndSPF_pk.index[IndSPF_pk['PRCCPIMean1']<-2]:
@@ -693,6 +702,8 @@ for id in IndSPF_pk.index[IndSPF_pk['PRCCPIMean1']<-2]:
     stats_est=SynDensityStat(SPF_bins,sim_probs_data)
     print(stats_est['mean'])
 # -
+
+
 
 
 
