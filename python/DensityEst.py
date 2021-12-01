@@ -19,19 +19,29 @@
 # - Three cases 
 #    - case 1. 3+ intervales with positive probabilities, to be fitted with a generalized beta distribution
 #    - case 2. exactly 2 adjacent intervals with positive probabilities, to be fitted with a triangle distribution 
-#    - case 3. one interval only, to be fitted with a uniform distribution
+#    - case 3. __one or multiple__ intervals with equal probabilities, to be fitted with a uniform distribution
+#    
 
 from scipy.stats import gamma
 from scipy.stats import beta 
+from scipy.stats import triang # new
+from scipy.stats import uniform # new
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 import numpy as np
 import pandas as pd
 
 
+# We need that for the 90-10 ratio:
+def quantile(x,quantiles):
+    xsorted = sorted(x)
+    qvalues = [xsorted[int(q * len(xsorted))] for q in quantiles]
+    return qvalues
+
+
 # ### Case 1. Generalized Beta Distribution
 
-# + code_folding=[0]
+# + code_folding=[]
 def GeneralizedBetaEst(bin,probs):
     """
     This fits a histogram with positive probabilities in at least 3 bins to a generalized beta distribution.
@@ -83,25 +93,32 @@ def GeneralizedBetaEst(bin,probs):
         return para_est   # could be 2 or 4 parameters 
 
 
-# + code_folding=[0]
-def GeneralizedBetaStats(alpha,beta,lb,ub):
+# + code_folding=[]
+def GeneralizedBetaStats(a,b,lb,ub):
     """
     This function computes the moments of a generalized beta distribution, mean and variance for now. 
     
     parameters
     ----------
-    alpha, beta, lb, ub: floats 
+    a, b, lb, ub: floats #changed to a,b instead of alpha and beta
     
     returns
     -------
     dict:  2 keys
            mean, float 
-           variance, float 
+           variance, float
+           standard deviation, float
+           ratio 90 10, float
     """
     # lb=0 and ub=1 for a standard beta distribution
-    mean = lb + (ub-lb)*alpha/(alpha+beta)
-    var = (ub-lb)**2*alpha*beta/((alpha+beta)**2*(alpha+beta+1))
-    return {"mean": mean,"variance":var}
+    mean = lb + (ub-lb)*a/(a+b)
+    var = (ub-lb)**2*a*b/((a+b)**2*(a+b+1))
+    std = np.sqrt(var)
+    # ratio
+    x = np.linspace(beta.ppf(0.01, a, b), beta.ppf(0.99, a, b), 100)
+    quantiles = quantile(x,[0.1, 0.9])
+    iqr1090 = quantiles[0]/quantiles[1]
+    return {"mean": mean,"variance":var, "std": std, "iqr1090": iqr1090}
 
 
 # -
@@ -127,8 +144,11 @@ def GeneralizedBetaStats(alpha,beta,lb,ub):
 #
 # $$\implies h = \frac{2}{t+c-b}$$
 #
+# Rearrange to solve for c:
+# $$ \implies c = (t - b) - \frac{2}{h} $$
+# $$ \implies c = ub - \frac{2}{h} $$
 
-# + code_folding=[0]
+# + code_folding=[]
 def TriangleEst(bin,probs):
     """
     The function fits histograms with exactly two adjacent 
@@ -149,6 +169,7 @@ def TriangleEst(bin,probs):
           lb: float, left bound 
           ub: float, right bound
           h:  float, height of the triangle
+          c: float, mode
     
     """
     if sum([probs[i]>0 for i in range(len(bin)-1)])==2:
@@ -172,6 +193,7 @@ def TriangleEst(bin,probs):
                 t = scl*(alf/(1-alf) +np.sqrt(alf)/(1-alf))
                 ub = bin[pprobadj[0]+1]+t 
                 h = 2/(t+bin[pprobadj[0]+1]-bin[pprobadj[0]])
+                c = ub - 2/h
             if probs[min_i] < probs[min_i+1]:
                 alf = probs[min_i]
                 ub = bin[pprobadj[0]+2]
@@ -179,16 +201,19 @@ def TriangleEst(bin,probs):
                 t = scl*(alf/(1-alf) + np.sqrt(alf)/(1-alf))
                 lb = bin[pprobadj[0]+1]-t  
                 h = 2/(t+bin[pprobadj[0]+2]-bin[pprobadj[0]+1])
+                c = ub - 2/h
             if probs[min_i] == probs[min_i+1]:
                 ub=bin[pprobadj[0]]
                 lb=bin[pprobadj[0]+2]
                 h = 2/(ub-lb)
+                c = ub - 2/h
         else:
             lb = []
             ub = []
             h = []
+            c = []
             print('Warning: the two intervals are not adjacent or are open-ended')
-    return {'lb':lb,'ub':ub,"height":h}
+    return {'lb':lb,'ub':ub,"height":h,"mode":c}
 
 
 # -
@@ -207,31 +232,38 @@ def TriangleEst(bin,probs):
 #
 #
 
-# + code_folding=[0]
-def TriangleStats(lb,ub):
+# + code_folding=[]
+def TriangleStats(lb,ub,c):
     """
     parameters
     ----------
     lb and ub:  float, left and right bounds of the triangle distribution
+    c : float, mode
     
     returns
     -------
     dict:  2 keys for now
            mean: estimated mean
            variance: estimated variance
+           std, float 
+           irq1090, float  
     """
     
     mean = (lb+ub)/2
     var = (lb**2+ub**2+(lb+ub)**2/4-lb*(lb+ub)/2-ub*(lb+ub)/2-lb*ub)/18
-    return {"mean":mean,"variance":var}
+    std = np.sqrt(var)
+    x = np.linspace(triang.ppf(0.01, c, lb, ub), triang.ppf(0.99, c, lb, ub), 100)
+    quantiles = quantile(x,[0.1, 0.9])
+    iqr1090 = quantiles[0]/quantiles[1]
+    return {"mean": mean,"variance":var, "std": std, "iqr1090": iqr1090}
 
 
 # -
 
 # ### Case 3. Uniform Distribution
 
-# + code_folding=[0]
-def UniformEst(bin,probs):
+# + code_folding=[]
+def UniformEst1bin(bin,probs):
     """
     This function fits a histogram with only one bin of positive probability to a uniform distribution.
     
@@ -262,7 +294,59 @@ def UniformEst(bin,probs):
     return {"lb":lb,"ub":ub}
 
 
-# + code_folding=[0]
+# -
+
+# New function: Takes into account that many bins have the same probability
+def UniformEst(bins,probs):
+    """
+    This function fits a histogram with only one bin of positive probability to a uniform distribution.
+    
+    paramters
+    ---------
+    bins:  ndarray, (n+1) x 1 
+          positions for n bins in the histograms 
+          
+    probs:  ndarrray n x 1
+          each entry is a probability for each of the n bins given by the surveyee, between 0 and 1
+    
+    returns
+    --------
+    dict: 2 keys
+          lb and ub, float. the left and right bounds of the uniform distribution
+    """    
+    pos_bins = []
+    # find non zero positions
+    pos_entry = np.argwhere(probs!=0)
+            
+    for i in pos_entry:
+        pos_bins.append(probs[i])
+    pos_bins = np.hstack(pos_bins)   # clean    
+
+    if len(pos_entry)>1:
+        for i in range(len(pos_entry)-1) :
+            if pos_entry[i+1] - pos_entry[i] !=1:
+                pos_bins = [] 
+               
+    if len(pos_bins)==1:
+        print('length pos bins is 1')
+        lb = bins[pos_entry[0]]
+        lb = lb[0] # into float
+        ub = bins[pos_entry[0] + 1]
+        ub = ub[0] # into float
+    if len(pos_bins)>1:
+        print('length pos bins is > 1')
+        lb = bins[pos_entry[0]]
+        lb = lb[0] # into float
+        ub = bins[pos_entry[0] + len(pos_bins)] 
+        ub = ub[0] # into float
+    if len(pos_bins)==0:
+        lb=[]
+        ub=[]
+
+    return {"lb":lb,"ub":ub}
+
+
+# + code_folding=[]
 def UniformStats(lb,ub):
     """
     The function computes the moment of a uniform distribution.
@@ -276,22 +360,31 @@ def UniformStats(lb,ub):
     dict:  2 keys for now
            mean: estimated mean
            variance: estimated variance 
+           std, float 
+           irq1090, float  
     """
     
-    if lb!=[] and ub!=[]:
+    if lb and ub: ## empty list is True
         mean = (lb+ub)/2
         var = (ub-lb)**2/12
+        std = np.sqrt(var)
+        x = np.linspace(uniform.ppf(lb),uniform.ppf(ub), 100)
+        p10 = np.percentile(x, 10)
+        p90 = np.percentile(x, 90)
+        iqr1090 = p90/p10
     else:
         mean=[]
         var=[]
-    return {"mean":mean,"variance":var}
+        std = []
+        iqr1090 = []
+    return {"mean": mean,"variance":var, "std": std, "iqr1090": iqr1090}
 
 
 # -
 
 # ### Test using made-up data
 
-# + code_folding=[0]
+# + code_folding=[]
 ## test 1: GenBeta Dist
 sim_bins= np.array([0,0.2,0.32,0.5,1,1.2])
 sim_probs=np.array([0,0.2,0.5,0.3,0])
@@ -300,16 +393,32 @@ GeneralizedBetaEst(sim_bins,sim_probs)
 # + code_folding=[0]
 ## test 2: Triangle Dist
 sim_bins2 = np.array([0,0.2,0.32,0.5,1,1.2])
-sim_probs2=np.array([0.2,0,0.8,0,0])
+sim_probs2=np.array([0,0.2,0.8,0,0])
 TriangleEst(sim_bins2,sim_probs2)
 
-# + code_folding=[0]
-## test 3: Uniform Dist
-
+# + code_folding=[]
+## test 3: Uniform Dist with one interval
 sim_bins3 = np.array([0,0.2,0.32,0.5,1,1.2])
-sim_probs3=np.array([0,0,0,0,1])
-UniformEst(sim_bins3,sim_probs3)
+sim_probs3 = np.array([0,0,1,0,0])
+para_est= UniformEst(sim_bins3,sim_probs3)
+print(para_est)
+UniformStats(para_est['lb'],para_est['ub']) 
 # -
+
+## test 4: Uniform Dist with multiple adjacent bins with same probabilities 
+sim_bins3 = np.array([0,0.2,0.32,0.5,1,1.2])
+sim_probs3=np.array([0.2,0.2,0.2,0.2,0.2])
+para_est= UniformEst(sim_bins3,sim_probs3)
+print(para_est)
+UniformStats(para_est['lb'],para_est['ub']) 
+
+
+## test 5: Uniform Dist with multiple non-adjacent bins with equal probabilities
+sim_bins3 = np.array([0,0.2,0.32,0.5,1,1.2])
+sim_probs3=np.array([0,0.5,0,0.5,0])
+para_est= UniformEst(sim_bins3,sim_probs3)
+print(para_est)
+UniformStats(para_est['lb'],para_est['ub']) 
 
 # ### Test with simulated data from known distribution 
 # - we simulate data from a true beta distribution with known parameters
@@ -355,12 +464,34 @@ def SynDensityStat(bin,probs):
     moments: dict with 2 keys (more to be added in future)
             mean: empty or float, estimated mean 
             variance:  empty or float, estimated variance 
+            std: empty or float, estimated standard deviation 
+            irq1090: empty or float, estimated irq1090 
     
     """
     if sum(probs)==1:
         print("probs sum up to 1")
+        ## Check if all bins have the same probability (special case for which we need Uniform and not Beta distributions)
+        all_pos = 0
+        pos_bin = []
+        # find non zero positions
+        pos_entry = np.argwhere(probs!=0)
+            
+        for i in pos_entry:
+            pos_bin.append(probs[i])
+        pos_bin = np.hstack(pos_bin)   # clean    
+
+        if len(pos_entry)>1:
+            for i in range(len(pos_entry)-1) :
+                if pos_entry[i+1] - pos_entry[i] !=1:
+                    pos_bin = [] 
+                
+        if len(pos_bin)!=0:
+            if np.all(pos_bin == pos_bin[0]):
+                all_pos = 1
+                
+                
         ## Beta distributions 
-        if sum([probs[i]>0 for i in range(len(bin)-1)])>=3:
+        if sum([probs[i]>0 for i in range(len(bin)-1)])>=3 and all_pos == 0:
             print("at least three bins with positive probs")
             para_est=GeneralizedBetaEst(bin,probs)
             if len(para_est)==4:
@@ -370,27 +501,33 @@ def SynDensityStat(bin,probs):
                 print('2 parameters')
                 return GeneralizedBetaStats(para_est[0],para_est[1],0,1)
         ## Triangle distributions
-        if sum([probs[i]>0 for i in range(len(bin)-1)])==2:
+        if sum([probs[i]>0 for i in range(len(bin)-1)])==2 and all_pos == 0:
             #print("There are two bins with positive probs")
             pprobadj = [i for i in range(1,len(bin)-3) if probs[i]>0 and probs[i+1]>0]   # from 1 to -3 bcz excluding the open-ended on the left/right
             if sum(pprobadj)>0:
                 #print('The two intervals are adjacent and not open-ended')
                 para_est=TriangleEst(bin,probs)
-                return TriangleStats(para_est['lb'],para_est['ub'])
+                return TriangleStats(para_est['lb'],para_est['ub'], para_est['mode'])
+        ## Uniform distributions
         if sum([probs[i]>0 for i in range(len(bin)-1)])==1:
             print('Only one interval with positive probs')
             para_est= UniformEst(bin,probs)
             print(para_est)
             return UniformStats(para_est['lb'],para_est['ub'])
+        if all_pos == 1:
+            print("all bins have the same prob")
+            para_est= UniformEst(bin,probs)
+            print(para_est)
+            return UniformStats(para_est['lb'],para_est['ub'])            
         else:
-            return {"mean":[],"variance":[]}
+            return {"mean":[],"variance":[], "std":[], "irq1090":[]}
     else:
-        return {"mean":[],"variance":[]}
+        return {"mean":[],"variance":[], "std":[], "irq1090":[]}
 
-
-# + code_folding=[0]
+# + code_folding=[]
 ## testing the synthesized estimator function using an arbitrary example created above
 SynDensityStat(sim_bins2,sim_probs2)['variance']
+SynDensityStat(sim_bins2,sim_probs2)['iqr1090']
 
 # + code_folding=[]
 ### loading probabilistic data  
@@ -425,8 +562,10 @@ len({'mean':1,'var':2})
 
 ## creating positions 
 index  = IndSPF.index
-columns=['PRCCPIMean0','PRCCPIVar0', 'PRCCPIMean1','PRCCPIVar1',
-         'PRCPCEMean0','PRCPCEVar0','PRCPCEMean1','PRCPCEVar1']
+columns=['PRCCPIMean0','PRCCPIVar0', 'PRCCPIStd0','PRCCPIIqr10900',
+         'PRCCPIMean1','PRCCPIVar1','PRCCPIStd1','PRCCPIIqr10901',
+         'PRCPCEMean0','PRCPCEVar0','PRCPCEStd0','PRCPCEIqr10900',
+         'PRCPCEMean1','PRCPCEVar1','PRCPCEStd1','PRCPCEIqr10901']
 IndSPF_moment_est = pd.DataFrame(index=index,columns=columns)
 
 ## Invoking the estimation
@@ -449,6 +588,10 @@ for i in range(nobs):
             print(stats_est['mean'])
             IndSPF_moment_est['PRCCPIVar0'][i]=stats_est['variance']
             print(stats_est['variance'])
+            IndSPF_moment_est['PRCCPIStd0'][i]=stats_est['std']
+            print(stats_est['std'])
+            IndSPF_moment_est['PRCCPIIqr10900'][i]=stats_est['iqr1090']
+            print(stats_est['iqr1090'])            
     if not np.isnan(PRCCPI_y1).any():
         stats_est=SynDensityStat(SPF_bins,PRCCPI_y1)
         if len(stats_est):
@@ -456,6 +599,10 @@ for i in range(nobs):
             IndSPF_moment_est['PRCCPIMean1'][i]=stats_est['mean']
             print(stats_est['variance'])
             IndSPF_moment_est['PRCCPIVar1'][i]=stats_est['variance']
+            print(stats_est['std'])
+            IndSPF_moment_est['PRCCPIStd1'][i]=stats_est['std']
+            print(stats_est['iqr1090'])
+            IndSPF_moment_est['PRCCPIIqr10901'][i]=stats_est['iqr1090']
     if not np.isnan(PRCPCE_y0).any():
         if len(stats_est)>0:
             stats_est=SynDensityStat(SPF_bins,PRCPCE_y0)
@@ -463,13 +610,22 @@ for i in range(nobs):
             IndSPF_moment_est['PRCPCEMean0'][i]=stats_est['mean']
             print(stats_est['variance'])
             IndSPF_moment_est['PRCPCEVar0'][i]=stats_est['variance']
+            print(stats_est['std'])
+            IndSPF_moment_est['PRCPCEStd0'][i]=stats_est['std']
+            print(stats_est['iqr1090'])
+            IndSPF_moment_est['PRCPCEIqr10900'][i]=stats_est['iqr1090']
     if not np.isnan(PRCPCE_y1).any():
         if len(stats_est)>0:
             stats_est=SynDensityStat(SPF_bins,PRCPCE_y1)
+            print(stats_est)
             print(stats_est['mean'])
             IndSPF_moment_est['PRCPCEMean1'][i]=stats_est['mean']
             print(stats_est['variance'])
             IndSPF_moment_est['PRCPCEVar1'][i]=stats_est['variance']
+            print(stats_est['std'])
+            IndSPF_moment_est['PRCPCEStd1'][i]=stats_est['std']
+            print(stats_est['iqr1090'])
+            IndSPF_moment_est['PRCPCEIqr10900'][i]=stats_est['iqr1090']
 # -
 
 ### exporting moments estimates to pkl
@@ -479,14 +635,24 @@ IndSPF_pk = pd.read_pickle('./DstSampleEst.pkl')
 
 # +
 IndSPF_pk['PRCCPIMean0']=pd.to_numeric(IndSPF_pk['PRCCPIMean0'],errors='coerce')   # CPI from y-1 to y 
-IndSPF_pk['PRCCPIVar0']=pd.to_numeric(IndSPF_pk['PRCCPIVar0'],errors='coerce')   
+IndSPF_pk['PRCCPIVar0']=pd.to_numeric(IndSPF_pk['PRCCPIVar0'],errors='coerce')  
+IndSPF_pk['PRCCPIStd0']=pd.to_numeric(IndSPF_pk['PRCCPIStd0'],errors='coerce') 
+IndSPF_pk['PRCCPIIqr10900']=pd.to_numeric(IndSPF_pk['PRCCPIIqr10900'],errors='coerce') 
+
 IndSPF_pk['PRCCPIMean1']=pd.to_numeric(IndSPF_pk['PRCCPIMean1'],errors='coerce')   # CPI from y to y+1  
 IndSPF_pk['PRCCPIVar1']=pd.to_numeric(IndSPF_pk['PRCCPIVar1'],errors='coerce')
+IndSPF_pk['PRCCPIStd1']=pd.to_numeric(IndSPF_pk['PRCCPIStd1'],errors='coerce')
+IndSPF_pk['PRCCPIIqr10901']=pd.to_numeric(IndSPF_pk['PRCCPIIqr10901'],errors='coerce')
 
 IndSPF_pk['PRCPCEMean0']=pd.to_numeric(IndSPF_pk['PRCPCEMean0'],errors='coerce')  # PCE from y-1 to y
 IndSPF_pk['PRCPCEVar0']=pd.to_numeric(IndSPF_pk['PRCPCEVar0'],errors='coerce') 
+IndSPF_pk['PRCPCEStd0']=pd.to_numeric(IndSPF_pk['PRCPCEStd0'],errors='coerce') 
+IndSPF_pk['PRCPCEIqr10900']=pd.to_numeric(IndSPF_pk['PRCPCEIqr10900'],errors='coerce') 
+
 IndSPF_pk['PRCPCEMean1']=pd.to_numeric(IndSPF_pk['PRCPCEMean1'],errors='coerce')  # PCE from y to y+1
 IndSPF_pk['PRCPCEVar1']=pd.to_numeric(IndSPF_pk['PRCPCEVar1'],errors='coerce')
+IndSPF_pk['PRCPCEStd1']=pd.to_numeric(IndSPF_pk['PRCPCEStd1'],errors='coerce')
+IndSPF_pk['PRCPCEIqr10901']=pd.to_numeric(IndSPF_pk['PRCPCEIqr10901'],errors='coerce')
 # -
 
 IndSPF_pk.tail()
@@ -508,5 +674,6 @@ for id in IndSPF_pk.index[IndSPF_pk['PRCCPIMean1']<-2]:
     stats_est=SynDensityStat(SPF_bins,sim_probs_data)
     print(stats_est['mean'])
 # -
+
 
 
