@@ -76,6 +76,7 @@ def GeneralizedBetaEst(bin,probs):
         print("lower bound is "+str(lb))
         ub=bin[max(pprob)+1]
         print("upper bound is "+str(ub))
+        
         x0_2para = (2,1)
         x0_4para = (2,1,0,1) 
         def distance2para(paras2): # if there is no open-ended bin with positive probs 
@@ -87,9 +88,13 @@ def GeneralizedBetaEst(bin,probs):
             distance= sum((beta.cdf(bin[1:],a,b,loc=lb,scale=ub-lb)-cdf)**2)
             return distance
         if lb==bin[0] and ub==bin[-1]:
-            para_est = minimize(distance4para,x0_4para,method='CG')['x']
+            para_est = minimize(distance4para,x0_4para,method='CG')['x'] 
         else:
             para_est = minimize(distance2para,x0_2para,method='CG')['x']
+            scale = ub-lb
+            para_est = np.concatenate([para_est,
+                                      np.array([lb,scale])]
+                                     )
         return para_est   # could be 2 or 4 parameters 
 
 
@@ -424,15 +429,29 @@ UniformStats(para_est['lb'],para_est['ub'])
 # - we simulate data from a true beta distribution with known parameters
 # - then we estimate the parameters with our module and see how close it is with the true parameters 
 
-# + code_folding=[0]
+# + code_folding=[]
 ## simulate a generalized distribution
-sim_n=1000
-true_alpha,true_beta,true_loc,true_scale=1.4,2.2,0,1
-sim_data = beta.rvs(true_alpha,true_beta,loc=true_loc,scale=true_scale,size=sim_n)
+sim_n=200
+true_alpha,true_beta,true_loc,true_scale=1.4,2.2,0,3
+sim_data = beta.rvs(true_alpha,true_beta,
+                    loc=true_loc,
+                    scale=true_scale,
+                    size=sim_n)
 sim_bins2=plt.hist(sim_data)[1]
 sim_probs2=plt.hist(sim_data)[0]/sim_n
 sim_est=GeneralizedBetaEst(sim_bins2,sim_probs2)
-sim_est
+
+print('Estimated parameters',sim_est)
+
+print('Estimated moments:',GeneralizedBetaStats(sim_est[0],
+                          sim_est[1],
+                          sim_est[2],
+                          sim_est[3]))
+
+print('True simulated moments:',
+      np.mean(sim_data),
+     np.std(sim_data)**2,
+     np.std(sim_data))
 
 # + code_folding=[0]
 ## plot the estimated generalized beta versus the histogram of simulated data drawn from a true beta distribution 
@@ -443,7 +462,7 @@ plt.hist(sim_data,density=True,label='Dist of Simulated Data')
 plt.legend(loc=0)
 
 
-# + code_folding=[0]
+# + code_folding=[]
 ## This is the synthesized density estimation function
 def SynDensityStat(bin,probs):
     """
