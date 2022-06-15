@@ -534,7 +534,7 @@ def SynDensityStat(bin,probs):
         
         # special case: if all bins are equally probable
         all_equal = np.all(pos_probs ==1/len(pos_probs))
-        print('If all prisitive bins are equally probable? ',str(all_equal))
+        print('If all positive bins are equally probable? ',str(all_equal))
         
         # special case2: if all bins are equally probable
         open_end = np.min(pos_entry)==0 or np.max(pos_entry)==len(probs)-1
