@@ -160,7 +160,7 @@ nobs=len(sample_data)
 sample_bins=np.array([-10,0,0.5,1,1.5,2,2.5,3,3.5,4,10])
 print("There are "+str(len(sample_bins)-1)+" bins in the sample data")
 
-# + code_folding=[0]
+# + code_folding=[]
 ##############################################
 ### attention: the estimation happens here!!!!!
 ###################################################
@@ -184,7 +184,7 @@ for i in range(nobs):
     ## take the probabilities (flip to the right order, normalized to 0-1)
     PRCCPI_y0 = np.flip(np.array([sample_data.iloc[i,:]['PRCCPI'+str(n)]/100 for n in range(1,11)]))
     print(PRCCPI_y0)
-    if not np.isnan(PRCCPI_y0).any():
+    if not np.isnan(PRCCPI_y0).all():
         stats_est=SynDensityStat(sample_bins,PRCCPI_y0)
         if stats_est is not None and len(stats_est)>0:
             sample_moment_est['Mean'][i]= stats_est['mean']
