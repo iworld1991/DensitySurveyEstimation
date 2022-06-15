@@ -46,7 +46,7 @@ def quantile(x,quantiles):
 
 # ### Case 1. Generalized Beta Distribution
 
-# + code_folding=[]
+# + code_folding=[0]
 def GeneralizedBetaEst(bin,probs):
     """
     This fits a histogram with positive probabilities in at least 3 bins to a generalized beta distribution.
@@ -120,9 +120,8 @@ def GeneralizedBetaEst(bin,probs):
                                 method='CG')
             if result['success']:
                 para_est = result['x']
-                scale = ub-lb
                 para_est = np.concatenate([para_est,
-                                          np.array([lb,scale])])
+                                          np.array([lb,ub])])
             else:
                 ## try one more time with alternative algorithms 
                 result = minimize(distance2para,
@@ -130,9 +129,8 @@ def GeneralizedBetaEst(bin,probs):
                                 method='BFGS')
                 if result['success']:
                     para_est = result['x']
-                    scale = ub-lb
                     para_est = np.concatenate([para_est,
-                                          np.array([lb,scale])])
+                                          np.array([lb,ub])])
                 else:
                     para_est = []
         return para_est   # could be 2 or 4 parameters 
@@ -180,8 +178,10 @@ def GeneralizedBetaStats(a,b,lb,ub):
 if __name__ == "__main__":
     
     ## test 1: GenBeta Dist
-    sim_bins= np.array([-2,0.3,0.6,0.9,1.2,2])
-    sim_probs= np.array([0.4,0.6,0.0,0.0,0.0])
+    sim_bins = np.array([-10,0,0.5,1,1.5,2,2.5,3,3.5,4,10])
+    sim_probs = np.array([0, 0, 0,  0,  0,  0.4, 0.4, 0.2, 0,  0, ])
+    #sim_bins= np.array([-2,0.3,0.6,0.9,1.2,2])
+    #sim_probs= np.array([0.0,0.1,0.5,0.4,0.0])
     ## plot
     plt.bar(sim_bins[1:],sim_probs,width=0.2)
     ## estimate
@@ -191,7 +191,7 @@ if __name__ == "__main__":
         print(GeneralizedBetaStats(para_est[0],
                             para_est[1],
                             para_est[2],
-                            para_est[3]))
+                             para_est[3]))
     else:
         print('no estimation')
 
