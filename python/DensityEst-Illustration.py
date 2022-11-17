@@ -195,12 +195,15 @@ for i in range(nobs):
             print(stats_est['std'])
             sample_moment_est['Iqr1090'][i]=stats_est['iqr1090']
             print(stats_est['iqr1090'])           
-# -
 
+# +
 ### exporting moments estimates to pkl
 data_est = pd.concat([sample_data,sample_moment_est], join='inner', axis=1)
-data_est.to_pickle("./DstSampleEst.pkl")
-data_pkl = pd.read_pickle('./DstSampleEst.pkl')
+
+## export the estimation to a pickle file
+data_est.to_pickle("../data/DstSampleEst.pkl")
+data_pkl = pd.read_pickle('../data/DstSampleEst.pkl')
+## start from the line above if the estimation takes a long time and you don't want to run estimation each time. 
 
 # +
 ## convert all moments to numeric values 
