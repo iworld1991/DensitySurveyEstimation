@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.11.2
+#       jupytext_version: 1.16.1
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -430,7 +430,7 @@ def UniformStats(lb,ub):
         mean = (lb+ub)/2
         var = (ub-lb)**2/12
         std = np.sqrt(var)
-        x = np.linspace(uniform.ppf(lb),uniform.ppf(ub), 100)
+        x = np.linspace(lb,ub, 200)
         p10 = np.percentile(x, 10)
         p90 = np.percentile(x, 90)
         iqr1090 = p90-p10
@@ -455,13 +455,14 @@ def UniformStats(lb,ub):
 if __name__ == "__main__":
     ## test 3: Uniform Dist with one interval
     sim_bins3 = np.array([0,0.2,0.32,0.5,1,1.2])
-    sim_probs3 = np.array([0,0,1,0,0])
+    sim_probs3 = np.array([0,1,0,0,0])
     ## plot
     plt.bar(sim_bins3[1:],sim_probs3,width=0.2)
     # Estimation
     para_est= UniformEst(sim_bins3,sim_probs3)
     print(para_est)
-    UniformStats(para_est['lb'],para_est['ub']) 
+    stats_est = UniformStats(para_est['lb'],para_est['ub']) 
+    print(stats_est)
 # -
 
 if __name__ == "__main__":
@@ -474,8 +475,9 @@ if __name__ == "__main__":
     para_est= UniformEst(sim_bins4,
                          sim_probs4)
     print(para_est)
-    UniformStats(para_est['lb'],
+    stats_est = UniformStats(para_est['lb'],
                  para_est['ub']) 
+    print(stats_est)
 
 if __name__ == "__main__":
     ## test 5: Uniform Dist with multiple non-adjacent bins with equal probabilities
@@ -635,3 +637,12 @@ if __name__ == "__main__":
     ## estimate
     para_est = SynDensityStat(sim_bins5,sim_probs5)
     print(para_est)
+
+x = np.linspace(0,2, 100)
+p10 = np.percentile(x, 25)
+p90 = np.percentile(x, 75)
+
+
+p10
+
+
